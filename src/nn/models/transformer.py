@@ -55,22 +55,23 @@ class Transformer(Module):
             dec_layers.append(SelfAttnBlock(emb_dim, n_heads, mlp_dim, dropout))
         self.dec_layers = ModuleList(dec_layers)
 
-        self.output_dag = OutputDAG(emb_dim, vocab_size)
+        self.output_dag = OutputDAG(emb_dim, vocab_size, n_heads)
 
     def enc_forward(self, enc_x):
         batch_size, enc_len = enc_x.shape
-        enc_pos = torch.arange(enc_len).unsqueeze(0)
+        enc_pos = torch.arange(enc_len, device=enc_x.device).unsqueeze(0)
 
         enc_x = self.vocab_embed(enc_x) + self.enc_pos_embed(enc_pos)
         for layer in self.enc_layers:
             enc_x = layer(enc_x)
         return enc_x
 
-    def dec_forward(self, dec_x, enc_x):
-        batch_size, dec_len = dec_x.shape
-        dec_pos = torch.arange(dec_len).unsqueeze(0)
+    def dec_forward(self, enc_x, dec_x_vocab, dec_x_pos):
+        batch_size, dec_len = dec_x_vocab.shape
 
-        dec_x = self.vocab_embed(dec_x) + self.dec_pos_embed(dec_pos)
+        dec_pos = self.dec_pos_embed(dec_x_pos)
+        dec_x = self.vocab_embed(dec_x_vocab) + dec_pos
+
         for i, layer in enumerate(self.dec_layers):
             if isinstance(layer, XAttnBlock):
                 dec_x = layer(dec_x, enc_x)
@@ -78,7 +79,7 @@ class Transformer(Module):
                 dec_x = layer(dec_x)
         return dec_x
 
-    def forward(self, enc_x, dec_x):
+    def forward(self, enc_x, dec_x_vocab, dec_x_pos, vertex_lens):
         enc_x = self.enc_forward(enc_x)
-        dec_x = self.dec_forward(dec_x, enc_x)
-        return self.output_dag(dec_x)
+        dec_x = self.dec_forward(enc_x, dec_x_vocab, dec_x_pos)
+        return self.output_dag(dec_x, vertex_lens)

@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import random
 import torch
+from src.datasets.dataset_base import DatasetBase
 
 
 def process(
@@ -29,10 +30,9 @@ def process(
         json.dump({"tokenizer_name": tokenizer_name}, f)
 
 
-class Dataset:
+class Dataset(DatasetBase):
     def __init__(self, dataset_path: str, max_seq_len: int):
-        self.ds = load_from_disk(dataset_path)
-        self.max_seq_len = min(max_seq_len, len(self.ds["input_ids"][0]))
+        super().__init__(dataset_path, max_seq_len)
 
     def __len__(self):
         return len(self.ds["input_ids"][0])

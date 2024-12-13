@@ -1,3 +1,7 @@
 .venv/
 data/
 *.pyc
+*.tfevents.*
+*.pth
+*.pth.*
+*.pt
