@@ -45,7 +45,8 @@ def load_checkpoint(
     model.to(device)
     model.load_state_dict(checkpoint["model"])
     optimizer = optim_class(model.parameters()) if optim_class else None
-    optimizer.load_state_dict(checkpoint["optimizer"])
+    if optimizer:
+        optimizer.load_state_dict(checkpoint["optimizer"])
     epoch = checkpoint["epoch"]
     writer = SummaryWriter(checkpoint["writer"]) if open_writer else None
     return epoch, model, optimizer, writer
