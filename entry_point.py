@@ -16,12 +16,12 @@ tokenizer = Tokenizer(tokenizer)
 
 # Load dataset
 dataset_path = "data/shakespeare"
-max_seq_len = 32
+max_seq_len = 64
 train_ds = ShakespeareDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = ShakespeareDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 8
+batch_size = 20
 min_ratio: int = 2
 max_ratio: int = 4
 max_num_spans: int = 6
@@ -66,13 +66,13 @@ test_dl = DataLoader(
 
 # Make or Load model
 
-emb_dim = 256
+emb_dim = 512
 vocab_size = tokenizer.vocab_size
 max_enc_len = max_seq_len + 2  # because we prepend and append bos and eos tokens
 max_dec_len = (max_seq_len + 2) * max_ratio
 n_heads = 8
-n_enc = 2
-n_dec = 2
+n_enc = 3
+n_dec = 3
 mlp_dim = emb_dim * 3
 dropout = 0.1
 
@@ -80,8 +80,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
 
 checkpoint_path = "checkpoints"
-checkpoint_name = "shakespeare.pth"
-writer_path = "runs/shakespeare"
+checkpoint_name = "shakespeare_big.pth"
+writer_path = "runs/shakespeare_big"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
@@ -107,30 +107,32 @@ except FileNotFoundError:
     writer = SummaryWriter(writer_path)
     epoch = 0
 
-target_epochs = 100
-save_every = 256
+print(f"Model parameter count: {sum(p.numel() for p in model.parameters()):,}")
+
+target_epochs = 360_000
+save_every = 5000
 test_every = 32
 grad_clip_norm = 0.1
 
 mask_percent = 0.9
 use_glancing = True
 
-with torch.autograd.set_detect_anomaly(True):
-    train(
-        model=model,
-        tk=tokenizer,
-        train_dl=train_dl,
-        test_dl=test_dl,
-        optimizer=optimizer,
-        writer=writer,
-        device=device,
-        mask_percent=mask_percent,
-        save_path=checkpoint_path,
-        save_name=checkpoint_name,
-        start_epoch=epoch,
-        end_epoch=target_epochs,
-        save_every=save_every,
-        test_every=test_every,
-        use_glancing=use_glancing,
-        grad_clip_norm=grad_clip_norm,
-    )
+
+train(
+    model=model,
+    tk=tokenizer,
+    train_dl=train_dl,
+    test_dl=test_dl,
+    optimizer=optimizer,
+    writer=writer,
+    device=device,
+    mask_percent=mask_percent,
+    save_path=checkpoint_path,
+    save_name=checkpoint_name,
+    start_epoch=epoch,
+    end_epoch=target_epochs,
+    save_every=save_every,
+    test_every=test_every,
+    use_glancing=use_glancing,
+    grad_clip_norm=grad_clip_norm,
+)
