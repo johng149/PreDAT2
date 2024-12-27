@@ -40,7 +40,10 @@ def load_checkpoint(
     open_writer: bool = False,
     device: str = "cpu",
 ) -> Tuple[int, Transformer, Optimizer | None, SummaryWriter | None]:
-    checkpoint = torch.load(checkpoint_path)
+    try:
+        checkpoint = torch.load(checkpoint_path)
+    except RuntimeError as e:
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     model = Transformer(**checkpoint["kwargs"])
     model.to(device)
     model.load_state_dict(checkpoint["model"])
@@ -50,3 +53,5 @@ def load_checkpoint(
     epoch = checkpoint["epoch"]
     writer = SummaryWriter(checkpoint["writer"]) if open_writer else None
     return epoch, model, optimizer, writer
+
+

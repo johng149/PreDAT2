@@ -16,18 +16,18 @@ tokenizer = Tokenizer(tokenizer)
 
 # Load dataset
 dataset_path = "data/shakespeare"
-max_seq_len = 64
+max_seq_len = 96
 train_ds = ShakespeareDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = ShakespeareDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 20
-min_ratio: int = 2
-max_ratio: int = 4
+batch_size = 5
+min_ratio: int = 4
+max_ratio: int = 8
 max_num_spans: int = 6
 max_span_fill: float = 0.8
-min_num_spans: int = 0
-min_span_fill: float = 0
+min_num_spans: int = 1
+min_span_fill: float = 0.2
 hard_fill = True
 
 train_dl = DataLoader(
@@ -109,10 +109,10 @@ except FileNotFoundError:
 
 print(f"Model parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-target_epochs = 360_000
+target_epochs = 560_000
 save_every = 5000
 test_every = 32
-grad_clip_norm = 0.1
+grad_clip_norm = None
 
 mask_percent = 0.9
 use_glancing = True

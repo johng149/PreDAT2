@@ -207,7 +207,8 @@ def train_step(
             )
             raise ValueError("Loss is inf")
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+        if grad_clip_norm is not None and grad_clip_norm > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
         optimizer.step()
         writer.add_scalar("Loss/Training", loss.item(), epoch)
         if pbar is not None:
