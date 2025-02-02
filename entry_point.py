@@ -5,7 +5,7 @@ from src.datasets.wikipedia.dataset import Dataset as WikipediaDataset
 from src.nn.models.transformer import Transformer
 from src.training.train import train
 from src.training.checkpoint import load_checkpoint
-from torch.optim import Adam
+from torch.optim import AdamW as Adam
 from torch.utils.tensorboard import SummaryWriter
 from torch import Tensor
 from src.tokenizer.model import Tokenizer
@@ -22,12 +22,12 @@ train_ds = WikipediaDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = WikipediaDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 5
-min_ratio: int = 4
-max_ratio: int = 8
-max_num_spans: int = 6
+batch_size = 24
+min_ratio: int = 3
+max_ratio: int = 3
+max_num_spans: int = 1
 max_span_fill: float = 0.15
-min_num_spans: int = 6
+min_num_spans: int = 1
 min_span_fill: float = 0.15
 hard_fill = True
 
@@ -81,8 +81,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
 
 checkpoint_path = "checkpoints"
-checkpoint_name = "wikipedia_big.pth"
-writer_path = "runs/wikipedia_big"
+checkpoint_name = "wikipedia_one_span.pth"
+writer_path = "runs/wikipedia_one_span"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(

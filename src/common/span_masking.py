@@ -139,7 +139,11 @@ def mask_span(
     max_mask_len = int(len(tokens) * fill_percent)
     num_spans = random.randint(min_num_spans, max_num_spans)
     start_indices = torch.randint(0, max(1, len(tokens)), (num_spans,))
-    span_lengths = torch.randint(1, max(2, max_mask_len + 1), (num_spans,))
+    # span_lengths = torch.randint(1, max(2, max_mask_len + 1), (num_spans,))
+    # paper says that instead of random span lengths, we use about the same
+    # amount for each span
+    uniform_amount = max_mask_len // num_spans
+    span_lengths = torch.ones((num_spans,), dtype=torch.int64) * uniform_amount
     span_lengths = torch.min(span_lengths, len(tokens) - start_indices)
     indices = torch.arange(len(tokens))
     mask = torch.any(
