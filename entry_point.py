@@ -23,7 +23,7 @@ train_ds = WikipediaDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = WikipediaDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 24
+batch_size = 64
 min_ratio: int = 3
 max_ratio: int = 3
 max_num_spans: int = 1
@@ -95,8 +95,8 @@ accelerator = Accelerator()
 device = accelerator.device
 
 checkpoint_path = "checkpoints"
-checkpoint_name = "wikipedia_test.pth"
-writer_path = "runs/wikipedia_test"
+checkpoint_name = "wikipedia_cuda_dist_fsdp.pth"
+writer_path = "runs/wikipedia_cuda_dist_fsdp"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
@@ -120,15 +120,16 @@ except FileNotFoundError:
     optimizer = Adam(model.parameters(), lr=1e-4)
     writer = SummaryWriter(writer_path) if accelerator.is_main_process else None
     epoch = 0
+    model, optimizer = accelerator.prepare(model, optimizer)
 
 print(f"Model parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-model, optimizer, train_dl, test_dl = accelerator.prepare(
-    model, optimizer, train_dl, test_dl
+train_dl, test_dl = accelerator.prepare(
+    train_dl, test_dl
 )
 
-target_epochs = 50
-save_every = 5000
+target_epochs = 350
+save_every = 50
 test_every = 32
 grad_clip_norm = None
 
