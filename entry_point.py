@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer
-from src.datasets.dataloader import DataLoader
-# from src.datasets.shakespeare.dataset import Dataset as ShakespeareDataset
+from src.datasets.collate_fn import collate_fn_maker
+from torch.utils.data import DataLoader
 from src.datasets.wikipedia.dataset import Dataset as WikipediaDataset
 from src.nn.models.transformer import Transformer
 from src.training.train import train
@@ -31,9 +31,7 @@ min_num_spans: int = 1
 min_span_fill: float = 0.15
 hard_fill = True
 
-train_dl = DataLoader(
-    ds=train_ds,
-    batch_size=batch_size,
+train_collate_fn = collate_fn_maker(
     enc_span_idx=tokenizer.enc_span_token,
     target_span_idx=tokenizer.targ_span_token,
     fill_idx=tokenizer.mask_token,
@@ -48,9 +46,7 @@ train_dl = DataLoader(
     hard_fill=hard_fill,
 )
 
-test_dl = DataLoader(
-    ds=test_ds,
-    batch_size=batch_size,
+test_collate_fn = collate_fn_maker(
     enc_span_idx=tokenizer.enc_span_token,
     target_span_idx=tokenizer.targ_span_token,
     fill_idx=tokenizer.mask_token,
@@ -64,6 +60,21 @@ test_dl = DataLoader(
     min_span_fill=min_span_fill,
     hard_fill=hard_fill,
 )
+
+train_dl = DataLoader(
+    dataset=train_ds,
+    batch_size=batch_size,
+    shuffle=True,
+    collate_fn=train_collate_fn,
+)
+
+test_dl = DataLoader(
+    dataset=test_ds,
+    batch_size=batch_size,
+    shuffle=True,
+    collate_fn=test_collate_fn,
+)
+
 
 # Make or Load model
 
@@ -81,8 +92,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
 
 checkpoint_path = "checkpoints"
-checkpoint_name = "wikipedia_one_span.pth"
-writer_path = "runs/wikipedia_one_span"
+checkpoint_name = "wikipedia_test.pth"
+writer_path = "runs/wikipedia_test"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(

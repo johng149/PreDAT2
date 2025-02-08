@@ -4,8 +4,8 @@ from pathlib import Path
 import json
 import random
 import torch
-from src.datasets.dataset_base import DatasetBase
-
+#from src.datasets.dataset_base import DatasetBase
+from torch.utils.data import Dataset as DatasetBase
 
 def process(
     tokenizer: PreTrainedTokenizerBase,
@@ -32,17 +32,11 @@ def process(
 
 class Dataset(DatasetBase):
     def __init__(self, dataset_path: str, max_seq_len: int):
-        super().__init__(dataset_path, max_seq_len)
+        self.ds = load_from_disk(dataset_path)
+        self.max_seq_len = max_seq_len
 
     def __len__(self):
         return len(self.ds["input_ids"][0])
 
-    def get_batch(self, batch_size: int):
-        batch_seq_len = random.randint(1, self.max_seq_len)
-        batch = []
-
-        for i in range(batch_size):
-            start_idx = random.randint(0, len(self.ds["input_ids"][0]) - batch_seq_len)
-            batch.append(self.ds["input_ids"][0][start_idx : start_idx + batch_seq_len])
-
-        return torch.stack(batch)
+    def __getitem__(self, idx):
+        return self.ds["input_ids"][0][idx: idx + self.max_seq_len]

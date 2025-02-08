@@ -1,4 +1,5 @@
 import torch
+from typing import List
 from src.common.span_masking import flow, mask_span
 import random
 from src.common.target_span_indices import targetSpanIndices
@@ -95,4 +96,59 @@ def collate_fn(
     decs_pos = torch.stack(decs_pos)
     decs_vocab = torch.stack(decs_vocab)
     target_span_indices = torch.stack(target_span_indices)
-    return encs, targs, decs_pos, decs_vocab, target_span_indices, ratio
+
+    # target_lens has shape (batch_size,)
+    # each element is the length of its respective target sequence
+    # however, since we are using bucketing, it should all be the same
+    batch_size, targ_len = targs.shape
+    target_lens = torch.full((batch_size,), targ_len)
+    # something similar for vertex_lens, but it is for the decoder
+    _, dec_len = decs_pos.shape
+    vertex_lens = torch.full((batch_size,), dec_len)
+
+    #return encs, targs, decs_pos, decs_vocab, target_span_indices, ratio
+    if isinstance(batch, List):
+        batch = torch.stack(batch)
+    return batch, encs, targs, decs_pos, decs_vocab, target_lens, vertex_lens, target_span_indices, ratio
+
+def ensure_bucketed(batch):
+    # with the migration over to Pytorch Datasets and Dataloaders, it is no longer guaranteed that
+    # each sample in the batch will have the same length as the others. This function will ensure
+    # that the batch is bucketed by finding the shortest sample and truncating all other samples
+    # to that length
+    shortest_len = min([len(sample) for sample in batch])
+    return [sample[:shortest_len] for sample in batch]
+
+def collate_fn_maker(
+        enc_span_idx: int,
+        target_span_idx: int,
+        fill_idx: int,
+        eos_idx: int,
+        bos_idx: int,
+        min_ratio: int = 2,
+        max_ratio: int = 4,
+        max_num_spans: int = 6,
+        max_span_fill: float = 0.8,
+        min_num_spans: int = 0,
+        min_span_fill: float = 0,
+        hard_fill=True,
+):
+    def collate(batch):
+        batch = ensure_bucketed(batch)
+        return collate_fn(
+            batch=batch,
+            enc_span_idx=enc_span_idx,
+            target_span_idx=target_span_idx,
+            fill_idx=fill_idx,
+            eos_idx=eos_idx,
+            bos_idx=bos_idx,
+            min_ratio=min_ratio,
+            max_ratio=max_ratio,
+            max_num_spans=max_num_spans,
+            max_span_fill=max_span_fill,
+            min_num_spans=min_num_spans,
+            min_span_fill=min_span_fill,
+            hard_fill=hard_fill,
+        )
+    
+    return collate

@@ -1,11 +1,10 @@
 from transformers import PreTrainedTokenizerBase
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from pathlib import Path
 import json
 import random
 import torch
-from src.datasets.dataset_base import DatasetBase
-
+from torch.utils.data import Dataset as DatasetBase
 
 def process(
     tokenizer: PreTrainedTokenizerBase,
@@ -46,25 +45,17 @@ def process(
 
 class Dataset(DatasetBase):
     def __init__(self, dataset_path: str, max_seq_len: int):
-        super().__init__(dataset_path, max_seq_len)
+        self.ds = load_from_disk(dataset_path)
+        self.max_seq_len = max_seq_len
 
     def __len__(self):
         return len(self.ds)
     
-    def get_batch(self, batch_size: int):
-        batch = []
-        batch_min_len = float("inf")
-
-        for i in range(batch_size):
-            index = random.randint(0, len(self.ds) - 1)
-            sample = self.ds.select([index])["input_ids"].flatten()
-            batch.append(sample)
-            batch_min_len = min(batch_min_len, len(sample))
-
-        max_len = min(self.max_seq_len, batch_min_len)
-        sliced_batch = []
-        for sample in batch:
-            start_idx = random.randint(0, len(sample) - max_len)
-            sliced_batch.append(sample[start_idx : start_idx + max_len])
+    def __getitem__(self, idx):
+        sample = self.ds.select([idx])["input_ids"].flatten()
+        length = len(sample)
+        farthest_start_idx = max(0, length - self.max_seq_len)
+        start_idx = random.randint(0, farthest_start_idx)
+        sample = sample[start_idx : start_idx + self.max_seq_len]
         
-        return torch.stack(sliced_batch)
+        return sample
