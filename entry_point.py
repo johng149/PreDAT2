@@ -10,6 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch import Tensor
 from src.tokenizer.model import Tokenizer
 import torch
+from accelerate import Accelerator
 
 # Load the tokenizer
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -88,19 +89,21 @@ n_dec = 3
 mlp_dim = emb_dim * 3
 dropout = 0.1
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
+accelerator = Accelerator()
+device = accelerator.device
 
 checkpoint_path = "checkpoints"
 checkpoint_name = "wikipedia_test.pth"
-writer_path = "runs/wikipedia_test"
+writer_path = "xruns/wikipedia_test"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
         checkpoint_path=f"{checkpoint_path}/{checkpoint_name}",
         optim_class=Adam,
         open_writer=True,
-        device=device,
+        accelerator=accelerator,
     )
 except FileNotFoundError:
     model = Transformer(
@@ -114,14 +117,17 @@ except FileNotFoundError:
         mlp_dim=mlp_dim,
         dropout=dropout,
     )
-    model = model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-4)
-    writer = SummaryWriter(writer_path)
+    writer = SummaryWriter(writer_path) if accelerator.is_main_process else None
     epoch = 0
 
 print(f"Model parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-target_epochs = 1_560_000
+model, optimizer, train_dl, test_dl = accelerator.prepare(
+    model, optimizer, train_dl, test_dl
+)
+
+target_epochs = 50
 save_every = 5000
 test_every = 32
 grad_clip_norm = None
@@ -131,6 +137,7 @@ use_glancing = True
 
 
 train(
+    accelerator=accelerator,
     model=model,
     tk=tokenizer,
     train_dl=train_dl,

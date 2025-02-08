@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 from typing import Tuple
 from src.tokenizer.model import Tokenizer
 import os
-
+from accelerate import Accelerator
 
 
 
@@ -40,14 +40,6 @@ def test_step(
                 target_span_indices,
                 ratio,
             ) = next(dataloader_iter)
-            batch = batch.to(device)
-            enc = enc.to(device)
-            targ = targ.to(device)
-            dec_pos = dec_pos.to(device)
-            dec_v = dec_v.to(device)
-            target_lens = target_lens.to(device)
-            vertex_lens = vertex_lens.to(device)
-            target_span_indices = target_span_indices.to(device)
 
             transition_probs, emission_probs = model(
                 enc_x=enc, dec_x_vocab=dec_v, dec_x_pos=dec_pos, vertex_lens=vertex_lens
@@ -61,7 +53,8 @@ def test_step(
             )
             if loss.isnan():
                 raise ValueError("Loss is NaN")
-            writer.add_scalar("Loss/Test", loss.item(), epoch)
+            if writer is not None:
+                writer.add_scalar("Loss/Test", loss.item(), epoch)
             model.train()
             return False
     except StopIteration:
@@ -88,14 +81,7 @@ def glancing_step(
             target_span_indices,
             ratio,
         ) = data
-        batch = batch.to(device)
-        enc = enc.to(device)
-        targ = targ.to(device)
-        dec_pos = dec_pos.to(device)
-        dec_v = dec_v.to(device)
-        target_lens = target_lens.to(device)
-        vertex_lens = vertex_lens.to(device)
-        target_span_indices = target_span_indices.to(device)
+
 
         transition_probs, emission_probs = model(
             enc_x=enc, dec_x_vocab=dec_v, dec_x_pos=dec_pos, vertex_lens=vertex_lens
@@ -111,15 +97,17 @@ def glancing_step(
         )
         mask = batchwise_npercent_mask(original=trace, percent=mask_percent)
         assignments = torch.where(mask, -1, trace)
-        assignments = assignments.to(device)
-        mask = mask.to(device)
-        trace = trace.to(device)
+        # assignments = assignments.to(device)
+        # mask = mask.to(device)
+        # trace = trace.to(device)
         scattered_vocab = dec_v.scatter(1, trace, torch.where(mask, -1, targ))
         scattered_vocab[scattered_vocab == -1] = fill_idx
-        return assignments.to(device), scattered_vocab.to(device)
+        #return assignments.to(device), scattered_vocab.to(device)
+        return assignments, scattered_vocab
 
 
 def train_step(
+    accelerator: Accelerator,
     model: Transformer,
     dataloader_iter: Iterator[
         Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int]
@@ -147,16 +135,8 @@ def train_step(
             target_span_indices,
             ratio,
         ) = next(dataloader_iter)
-        batch = batch.to(device)
-        enc = enc.to(device)
-        targ = targ.to(device)
-        dec_pos = dec_pos.to(device)
-        dec_v = dec_v.to(device)
-        target_lens = target_lens.to(device)
-        vertex_lens = vertex_lens.to(device)
-        target_span_indices = target_span_indices.to(device)
 
-        assignments, dev_v = (
+        assignments, dec_v = (
             (None, dec_v)
             if not use_glancing
             else glancing_step(
@@ -193,27 +173,29 @@ def train_step(
         if loss.isnan():
             raise ValueError("Loss is NaN")
         if loss.isinf():
-            print("Loss is inf, saving data for debugging...")
-            torch.save(
-                {
-                    "enc": enc,
-                    "targ": targ,
-                    "dec_pos": dec_pos,
-                    "dec_v": dec_v,
-                    "target_lens": target_lens,
-                    "vertex_lens": vertex_lens,
-                    "target_span_indices": target_span_indices,
-                    "ratio": ratio,
-                    "assignments": assignments,
-                },
-                "inf_data.pt",
-            )
+            # print("Loss is inf, saving data for debugging...")
+            # torch.save(
+            #     {
+            #         "enc": enc,
+            #         "targ": targ,
+            #         "dec_pos": dec_pos,
+            #         "dec_v": dec_v,
+            #         "target_lens": target_lens,
+            #         "vertex_lens": vertex_lens,
+            #         "target_span_indices": target_span_indices,
+            #         "ratio": ratio,
+            #         "assignments": assignments,
+            #     },
+            #     "inf_data.pt",
+            # )
             raise ValueError("Loss is inf")
-        loss.backward()
+        #loss.backward()
+        accelerator.backward(loss)
         if grad_clip_norm is not None and grad_clip_norm > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
         optimizer.step()
-        writer.add_scalar("Loss/Training", loss.item(), epoch)
+        if writer is not None:
+            writer.add_scalar("Loss/Training", loss.item(), epoch)
         if pbar is not None:
             pbar.set_postfix({"Loss": loss.item()})
         return False
@@ -222,6 +204,7 @@ def train_step(
 
 
 def train(
+    accelerator: Accelerator,
     model: Transformer,
     tk: Tokenizer,
     train_dl: DataLoader,
@@ -252,6 +235,7 @@ def train(
         for epoch in pbar:
 
             train_iter_fail = train_step(
+                accelerator=accelerator,
                 model=model,
                 dataloader_iter=train_iter,
                 optimizer=optimizer,
@@ -268,6 +252,7 @@ def train(
                 # this happens when the dataloader is exhausted
                 train_iter = iter(train_dl)
                 train_step(
+                    accelerator=accelerator,
                     model=model,
                     dataloader_iter=train_iter,
                     optimizer=optimizer,
@@ -299,6 +284,7 @@ def train(
                     )
             if epoch % save_every == 0:
                 save_checkpoint(
+                    accelerator=accelerator,
                     model=model,
                     optimizer=optimizer,
                     writer=writer,
@@ -308,7 +294,9 @@ def train(
                 )
     except KeyboardInterrupt:
         print("Training interrupted, saving model...")
+        accelerator.wait_for_everyone()
         save_checkpoint(
+            accelerator=accelerator,
             model=model,
             optimizer=optimizer,
             writer=writer,
@@ -319,7 +307,9 @@ def train(
         exit_saved = True
     if not exit_saved:
         print("Training complete, saving model...")
+        accelerator.wait_for_everyone()
         save_checkpoint(
+            accelerator=accelerator,
             model=model,
             optimizer=optimizer,
             writer=writer,
