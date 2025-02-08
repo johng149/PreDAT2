@@ -293,7 +293,7 @@ def train(
                     checkpoint_name=save_name,
                 )
     except KeyboardInterrupt:
-        print("Training interrupted, saving model...")
+        print("Training interrupted, saving model. With Accelerator you may encounter an error, but the checkpoint should be fine")
         accelerator.wait_for_everyone()
         save_checkpoint(
             accelerator=accelerator,
