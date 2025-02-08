@@ -3,7 +3,6 @@ from datasets import load_dataset, load_from_disk
 from pathlib import Path
 import json
 import random
-import torch
 from torch.utils.data import Dataset as DatasetBase
 
 def process(

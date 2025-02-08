@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from src.datasets.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from src.nn.models.transformer import Transformer
 from src.training.loss_fn import dag_loss
 from src.training.glancing import findPathBatched, backtrace
