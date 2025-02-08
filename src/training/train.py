@@ -15,6 +15,8 @@ from src.tokenizer.model import Tokenizer
 import os
 
 
+
+
 def test_step(
     model: Transformer,
     dataloader_iter: Iterator[
@@ -61,6 +63,7 @@ def test_step(
                 raise ValueError("Loss is NaN")
             writer.add_scalar("Loss/Test", loss.item(), epoch)
             model.train()
+            return False
     except StopIteration:
         return True
 
@@ -213,6 +216,7 @@ def train_step(
         writer.add_scalar("Loss/Training", loss.item(), epoch)
         if pbar is not None:
             pbar.set_postfix({"Loss": loss.item()})
+        return False
     except StopIteration:
         return True
 
@@ -247,7 +251,7 @@ def train(
         pbar = tqdm(range(start_epoch, end_epoch))
         for epoch in pbar:
 
-            train_done = train_step(
+            train_iter_fail = train_step(
                 model=model,
                 dataloader_iter=train_iter,
                 optimizer=optimizer,
@@ -260,7 +264,7 @@ def train(
                 use_glancing=use_glancing,
                 grad_clip_norm=grad_clip_norm,
             )
-            if not train_done:
+            if train_iter_fail:
                 # this happens when the dataloader is exhausted
                 train_iter = iter(train_dl)
                 train_step(
@@ -277,14 +281,14 @@ def train(
                     grad_clip_norm=grad_clip_norm,
                 )
             if epoch % test_every == 0:
-                test_done = test_step(
+                test_iter_fail = test_step(
                     model=model,
                     dataloader_iter=test_iter,
                     writer=writer,
                     epoch=epoch,
                     device=device,
                 )
-                if not test_done:
+                if test_iter_fail:
                     test_iter = iter(test_dl)
                     test_step(
                         model=model,
