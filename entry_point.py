@@ -96,7 +96,7 @@ device = accelerator.device
 
 checkpoint_path = "checkpoints"
 checkpoint_name = "wikipedia_test.pth"
-writer_path = "xruns/wikipedia_test"
+writer_path = "runs/wikipedia_test"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
