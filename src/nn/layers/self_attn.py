@@ -50,7 +50,7 @@ class SelfAttnBlock(Module):
         self.ff2 = Linear(mlp_dim, emb_dim)
         self.ff_dropout = Dropout(dropout)
 
-    def forward(self, x):
+    def forward(self, x, *args):
         x = x + self.attn(self.norm1(x))
         ff = self.ff1(self.norm2(x))
         ff = self.activation(ff)

@@ -76,7 +76,11 @@ class Transformer(Module):
             if isinstance(layer, XAttnBlock):
                 dec_x = layer(dec_x, enc_x)
             else:
-                dec_x = layer(dec_x)
+                # TODO: remove this if else
+                # for some reason when auto wrapping XAttnBlock and
+                # SelfAttnBlock, this `isinstance` check doesn't work
+                # so both blocks need to be passed in as arguments
+                dec_x = layer(dec_x, enc_x) # fix?
         return dec_x
 
     def forward(self, enc_x, dec_x_vocab, dec_x_pos, vertex_lens):
