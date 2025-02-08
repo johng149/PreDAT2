@@ -22,7 +22,7 @@ train_ds = WikipediaDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = WikipediaDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 24
+batch_size = 4
 min_ratio: int = 3
 max_ratio: int = 3
 max_num_spans: int = 1
@@ -81,8 +81,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
 
 checkpoint_path = "checkpoints"
-checkpoint_name = "wikipedia_one_span.pth"
-writer_path = "runs/wikipedia_one_span"
+checkpoint_name = "wikipedia_fuzzy_dip.pth"
+writer_path = "runs/wikipedia_fuzzy_dip"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
@@ -110,7 +110,7 @@ except FileNotFoundError:
 
 print(f"Model parameter count: {sum(p.numel() for p in model.parameters()):,}")
 
-target_epochs = 1_560_000
+target_epochs = 10_560_000
 save_every = 5000
 test_every = 32
 grad_clip_norm = None

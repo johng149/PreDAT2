@@ -128,6 +128,8 @@ def find_ngrams(target_seqs, n, as_tensor=True) -> Union[Tuple[Tensor, Tensor], 
     batch_size, seq_len = target_seqs.shape
     assert seq_len >= n, "Sequence length must be greater than or equal to n-gram order"
     with torch.no_grad():
+        ngrams_dicts = []
+        all_ngrams = set()
         ngrams = []
         counts = []
 
@@ -135,14 +137,22 @@ def find_ngrams(target_seqs, n, as_tensor=True) -> Union[Tuple[Tensor, Tensor], 
             ngram_dict = defaultdict(int)
             for i in range(seq_len - n + 1):
                 ngram = tuple(target_seqs[b, i:i+n].tolist())
+                all_ngrams.add(ngram)
                 ngram_dict[ngram] += 1
+            ngrams_dicts.append(ngram_dict)
 
-            ngrams.append(list(ngram_dict.keys()))
-            counts.append(list(ngram_dict.values()))
+        for ngram_dict in ngrams_dicts:
+            curr_ngrams = []
+            curr_counts = []
+            for known_ngram in all_ngrams:
+                curr_ngrams.append(known_ngram)
+                curr_counts.append(ngram_dict[known_ngram])
+            ngrams.append(curr_ngrams)
+            counts.append(curr_counts)
         
         if as_tensor:
-            ngrams = torch.tensor(ngrams, dtype=torch.long)
-            counts = torch.tensor(counts, dtype=torch.long)
+            ngrams = torch.tensor(ngrams, dtype=torch.long, device=target_seqs.device)
+            counts = torch.tensor(counts, dtype=torch.long, device=target_seqs.device)
         
         return ngrams, counts
     
@@ -196,52 +206,103 @@ def log_bmm(log_A, log_B):
     # 3. LogSumExp over the `n` dimension (matrix multiplication reduction)
     log_C = torch.logsumexp(log_product, dim=2)  # Shape (b, m, p)
 
-    return log_C
+    return log_C.to(log_A.device)
 
-def fuzzy_ngram_loss(probs, transition, tgt_tokens, ngrams_order=2):
+# def fuzzy_ngram_loss(probs, transition, tgt_tokens, ngrams_order=2):
+#     # probs: batch_size x num_vertices x vocab_size
+#     # transition: batch_size x num_vertices x num_vertices
+#     # tgt_tokens: batch_size x tgt_len
+#     # we assume tgt_tokens have no padding (all the same length)
+#     ngrams, ngram_counts = find_ngrams(tgt_tokens, ngrams_order)
+
+#     passing_probs = passing_probability(transition, return_log=True)
+
+#     expected_tol_num_of_ngrams = passing_probs.unsqueeze(1)
+
+#     for i in range(ngrams_order-1):
+#         expected_tol_num_of_ngrams = log_bmm(expected_tol_num_of_ngrams, transition)
+
+
+#     expected_tol_num_of_ngrams = torch.logsumexp(expected_tol_num_of_ngrams, dim=-1)
+#     expected_tol_num_of_ngrams = torch.logsumexp(expected_tol_num_of_ngrams, dim=-1)
+
+
+#     ngram_target = ngrams[:,:,0].unsqueeze(-1) #bsz, number of ngram, 1
+
+#     #bsz, number of ngram, num vertices
+#     ngram_target_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,ngram_target.size(-2),-1,-1),dim=-1,index=ngram_target.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze()
+
+#     expected_matched_num_of_ngrams = passing_probs.unsqueeze(1) + ngram_target_probs     
+
+#     for i in range(1,ngrams_order):
+#         ngram_target = ngrams[:,:,i].unsqueeze(-1) #bsz, number of ngram, 1
+
+#         #bsz, number of ngram, num vertices
+#         ngram_target_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,ngram_target.size(-2),-1,-1),dim=-1,index=ngram_target.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze(dim=-1)
+
+#         expected_matched_num_of_ngrams = log_bmm(expected_matched_num_of_ngrams, transition)
+#         expected_matched_num_of_ngrams = expected_matched_num_of_ngrams + ngram_target_probs
+
+
+#     expected_matched_num_of_ngrams = torch.logsumexp(expected_matched_num_of_ngrams, dim=-1)
+
+#     ngram_counts = ngram_counts.log()
+#     cutted_expected_matched_num_of_ngrams = torch.min(expected_matched_num_of_ngrams, ngram_counts)#.sum(dim=-1)
+#     cutted_expected_matched_num_of_ngrams = torch.logsumexp(cutted_expected_matched_num_of_ngrams, dim=-1)
+
+#     cutted_precision = cutted_expected_matched_num_of_ngrams - expected_tol_num_of_ngrams
+
+#     loss = cutted_precision.exp().mean()
+
+#     return -loss
+
+def fuzzy_ngram_loss(probs, transition, tgt_tokens, ngrams_order = 2):
+    probs = probs.exp()
+    transition = transition.exp()
     # probs: batch_size x num_vertices x vocab_size
     # transition: batch_size x num_vertices x num_vertices
     # tgt_tokens: batch_size x tgt_len
     # we assume tgt_tokens have no padding (all the same length)
-    ngrams, ngram_counts = find_ngrams(tgt_tokens, ngrams_order)
+    ngrams_tensor_bsz, ngrams_max_count_bsz = find_ngrams(tgt_tokens, ngrams_order)
 
-    passing_probs = passing_probability(transition, return_log=True)
+    arrival_prob = torch.ones(transition.size(0),1).to(transition)
+    for i in range(1,transition.size(-1)):
+        arrival_prob = torch.cat([arrival_prob, torch.mul(arrival_prob[:,0:i],transition[:,0:i,i]).sum(dim=-1).unsqueeze(-1)],dim=-1)
 
-    expected_tol_num_of_ngrams = passing_probs.unsqueeze(1)
+    expected_tol_num_of_ngrams = arrival_prob.unsqueeze(1)
 
     for i in range(ngrams_order-1):
-        expected_tol_num_of_ngrams = log_bmm(expected_tol_num_of_ngrams, transition)
+        expected_tol_num_of_ngrams= torch.bmm(expected_tol_num_of_ngrams,transition)
 
 
-    expected_tol_num_of_ngrams = torch.logsumexp(expected_tol_num_of_ngrams, dim=-1)
-    expected_tol_num_of_ngrams = torch.logsumexp(expected_tol_num_of_ngrams, dim=-1)
+    expected_tol_num_of_ngrams = expected_tol_num_of_ngrams.sum(dim=-1).sum(dim=-1)
 
 
-    ngram_target = ngrams[:,:,0].unsqueeze(-1) #bsz, number of ngram, 1
+    first_word_in_each_gram = ngrams_tensor_bsz[:,:,0].unsqueeze(-1) #bsz, number of ngram, 1
 
-    #bsz, number of ngram, num vertices
-    ngram_target_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,ngram_target.size(-2),-1,-1),dim=-1,index=ngram_target.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze()
+    #bsz, number of ngram, prelen
+    first_word_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,first_word_in_each_gram.size(-2),-1,-1),dim=-1,index=first_word_in_each_gram.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze()
 
-    expected_matched_num_of_ngrams = passing_probs.unsqueeze(1) + ngram_target_probs     
+
+    expected_matched_num_of_ngrams = torch.mul(arrival_prob.unsqueeze(1),first_word_probs)
+    del first_word_probs        
 
     for i in range(1,ngrams_order):
-        ngram_target = ngrams[:,:,i].unsqueeze(-1) #bsz, number of ngram, 1
+        target_at_this_word = ngrams_tensor_bsz[:,:,i].unsqueeze(-1) #bsz, number of ngram, 1
 
-        #bsz, number of ngram, num vertices
-        ngram_target_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,ngram_target.size(-2),-1,-1),dim=-1,index=ngram_target.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze(dim=-1)
+        #bsz, number of ngram, prelen
+        word_probs = torch.gather(input=probs.unsqueeze(1).expand(-1,target_at_this_word.size(-2),-1,-1),dim=-1,index=target_at_this_word.unsqueeze(2).expand(-1,-1,probs.size(-2),-1)).squeeze(dim=-1)
 
-        expected_matched_num_of_ngrams = log_bmm(expected_matched_num_of_ngrams, transition)
-        expected_matched_num_of_ngrams = expected_matched_num_of_ngrams + ngram_target_probs
+        expected_matched_num_of_ngrams = torch.mul(torch.bmm(expected_matched_num_of_ngrams,transition),word_probs)
+        del word_probs
 
 
-    expected_matched_num_of_ngrams = torch.logsumexp(expected_matched_num_of_ngrams, dim=-1)
+    expected_matched_num_of_ngrams = expected_matched_num_of_ngrams.sum(dim=-1)
 
-    ngram_counts = ngram_counts.log()
-    cutted_expected_matched_num_of_ngrams = torch.min(expected_matched_num_of_ngrams, ngram_counts)#.sum(dim=-1)
-    cutted_expected_matched_num_of_ngrams = torch.logsumexp(cutted_expected_matched_num_of_ngrams, dim=-1)
+    cutted_expected_matched_num_of_ngrams = torch.min(expected_matched_num_of_ngrams, ngrams_max_count_bsz.to(expected_matched_num_of_ngrams)).sum(dim=-1)
 
-    cutted_precision = cutted_expected_matched_num_of_ngrams - expected_tol_num_of_ngrams
+    cutted_precision = cutted_expected_matched_num_of_ngrams / expected_tol_num_of_ngrams
 
-    loss = cutted_precision.exp().mean()
+    loss = cutted_precision
 
-    return -loss
+    return -loss.mean()

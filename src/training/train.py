@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from src.datasets.dataloader import DataLoader
 from src.nn.models.transformer import Transformer
-from src.training.loss_fn import dag_loss
+from src.training.loss_fn import dag_loss, fuzzy_ngram_loss
 from src.training.glancing import findPathBatched, backtrace
 from src.common.npercent_mask import batchwise_npercent_mask
 from typing import Iterator
@@ -50,16 +50,24 @@ def test_step(
             transition_probs, emission_probs = model(
                 enc_x=enc, dec_x_vocab=dec_v, dec_x_pos=dec_pos, vertex_lens=vertex_lens
             )
-            loss = dag_loss(
+            d_loss = dag_loss(
                 targets=targ,
                 transition_matrix=transition_probs,
                 emission_probs=emission_probs,
                 target_lens=target_lens,
                 vertex_lens=vertex_lens,
             )
+            fuzzy_loss = fuzzy_ngram_loss(
+                probs=emission_probs,
+                transition=transition_probs,
+                tgt_tokens=targ,
+            )
+            loss = d_loss + fuzzy_loss
             if loss.isnan():
                 raise ValueError("Loss is NaN")
             writer.add_scalar("Loss/Test", loss.item(), epoch)
+            writer.add_scalar("Loss/DAG_Test", d_loss.item(), epoch)
+            writer.add_scalar("Loss/Fuzzy_Test", fuzzy_loss.item(), epoch)
             model.train()
     except StopIteration:
         return True
@@ -153,7 +161,7 @@ def train_step(
         vertex_lens = vertex_lens.to(device)
         target_span_indices = target_span_indices.to(device)
 
-        assignments, dev_v = (
+        assignments, dec_v = (
             (None, dec_v)
             if not use_glancing
             else glancing_step(
@@ -179,7 +187,7 @@ def train_step(
         transition_probs, emission_probs = model(
             enc_x=enc, dec_x_vocab=dec_v, dec_x_pos=dec_pos, vertex_lens=vertex_lens
         )
-        loss = dag_loss(
+        d_loss = dag_loss(
             targets=targ,
             transition_matrix=transition_probs,
             emission_probs=emission_probs,
@@ -187,7 +195,32 @@ def train_step(
             vertex_lens=vertex_lens,
             assignments=assignments,
         )
+        fuzzy_loss = fuzzy_ngram_loss(
+            probs=emission_probs,
+            transition=transition_probs,
+            tgt_tokens=targ,
+        )
+        loss = d_loss + fuzzy_loss
         if loss.isnan():
+            print("Loss is NaN, saving data for debugging...")
+            torch.save(
+                {
+                    "enc": enc,
+                    "targ": targ,
+                    "dec_pos": dec_pos,
+                    "dec_v": dec_v,
+                    "target_lens": target_lens,
+                    "vertex_lens": vertex_lens,
+                    "target_span_indices": target_span_indices,
+                    "ratio": ratio,
+                    "assignments": assignments,
+                    "dag_loss": d_loss,
+                    "fuzzy_loss": fuzzy_loss,
+                    "transition_probs": transition_probs,
+                    "emission_probs": emission_probs,
+                },
+                "nan_data.pt",
+            )
             raise ValueError("Loss is NaN")
         if loss.isinf():
             print("Loss is inf, saving data for debugging...")
@@ -202,6 +235,10 @@ def train_step(
                     "target_span_indices": target_span_indices,
                     "ratio": ratio,
                     "assignments": assignments,
+                    "dag_loss": d_loss,
+                    "fuzzy_loss": fuzzy_loss,
+                    "transition_probs": transition_probs,
+                    "emission_probs": emission_probs,
                 },
                 "inf_data.pt",
             )
@@ -211,6 +248,8 @@ def train_step(
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
         optimizer.step()
         writer.add_scalar("Loss/Training", loss.item(), epoch)
+        writer.add_scalar("Loss/DAG", d_loss.item(), epoch)
+        writer.add_scalar("Loss/Fuzzy", fuzzy_loss.item(), epoch)
         if pbar is not None:
             pbar.set_postfix({"Loss": loss.item()})
     except StopIteration:
