@@ -100,7 +100,8 @@ writer_path = "runs/wikipedia_cuda_dist_fsdp"
 
 try:
     epoch, model, optimizer, writer = load_checkpoint(
-        checkpoint_path=f"{checkpoint_path}/{checkpoint_name}",
+        checkpoint_path=checkpoint_path,
+        checkpoint_name=checkpoint_name,
         optim_class=Adam,
         open_writer=True,
         accelerator=accelerator,
