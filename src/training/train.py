@@ -225,9 +225,6 @@ def train(
     epoch = start_epoch
     exit_saved = False
     try:
-        # ensure save_path exists
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
 
         train_iter = iter(train_dl)
         test_iter = iter(test_dl)

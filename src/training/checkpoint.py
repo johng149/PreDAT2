@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 from typing import Tuple
 from accelerate import Accelerator
+import shutil
 
 def get_filename(name: str) -> str:
     return Path(name).stem
@@ -27,12 +28,17 @@ def save_checkpoint_non_sharded(
 ):
     container_dir = get_filename(checkpoint_name)
     checkpoint = os.path.join(checkpoint_dir, container_dir, checkpoint_name)
+    checkpoint_backup = get_backupname(checkpoint_name)
+    checkpoint_backup = os.path.join(checkpoint_dir, container_dir, checkpoint_backup)
     if accelerator.is_main_process:
-        checkpoint_backup_name = get_backupname(checkpoint_name)
-        if os.path.exists(checkpoint_backup_name):
-            os.remove(checkpoint_backup_name)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        if not os.path.exists(os.path.dirname(checkpoint)):
+            os.makedirs(os.path.dirname(checkpoint))
+        if os.path.exists(checkpoint_backup):
+            os.remove(checkpoint_backup)
         if os.path.exists(checkpoint):
-            os.rename(checkpoint, checkpoint_backup_name)
+            os.rename(checkpoint, checkpoint_backup)
         unwrapped_model = accelerator.unwrap_model(model)
         torch.save(
             {
@@ -56,12 +62,17 @@ def save_checkpoint_sharded(
 ):
     container_dir = get_filename(checkpoint_name)
     checkpoint = os.path.join(checkpoint_dir, container_dir, checkpoint_name)
+    checkpoint_backup = get_backupname(checkpoint_name)
+    checkpoint_backup = os.path.join(checkpoint_dir, container_dir, checkpoint_backup)
     if accelerator.is_main_process:
-        checkpoint_backup_name = get_backupname(checkpoint_name)
-        if os.path.exists(checkpoint_backup_name):
-            os.remove(checkpoint_backup_name)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        if not os.path.exists(os.path.dirname(checkpoint)):
+            os.makedirs(os.path.dirname(checkpoint))
+        if os.path.exists(checkpoint_backup):
+            os.remove(checkpoint_backup)
         if os.path.exists(checkpoint):
-            os.rename(checkpoint, checkpoint_backup_name)
+            os.rename(checkpoint, checkpoint_backup)
         unwrapped_model = accelerator.unwrap_model(model)
         torch.save(
             {
@@ -72,14 +83,15 @@ def save_checkpoint_sharded(
             checkpoint
         )
     shard_path = get_sharded_dir(checkpoint)
-    shard_path_backup = get_sharded_dir(checkpoint_backup_name)
+    shard_path_backup = get_sharded_dir(checkpoint_backup)
     if accelerator.is_main_process:
         if os.path.exists(shard_path_backup):
-            os.remove(shard_path_backup)
+            shutil.rmtree(shard_path_backup)
         if os.path.exists(shard_path):
             os.rename(shard_path, shard_path_backup)
     accelerator.wait_for_everyone()
     accelerator.save_state(shard_path)
+    accelerator.wait_for_everyone()
 
 def save_checkpoint(
     model: Transformer,
@@ -130,19 +142,20 @@ def load_checkpoint_sharded(
     open_writer: bool = False,
 ) -> Tuple[int, Transformer, Optimizer | None, SummaryWriter | None]:
     container_dir = get_filename(checkpoint_name)
-    checkpoint = os.path.join(checkpoint_path, container_dir, checkpoint_name)
+    checkpoint_path = os.path.join(checkpoint_path, container_dir, checkpoint_name)
     try:
-        checkpoint = torch.load(checkpoint, map_location=accelerator.device if accelerator else None)
+        checkpoint = torch.load(checkpoint_path, map_location=accelerator.device if accelerator else None)
     except RuntimeError as e:
-        checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     model = Transformer(**checkpoint["kwargs"])
     optimizer = optim_class(model.parameters()) if optim_class else None
     epoch = checkpoint["epoch"]
     writer = SummaryWriter(checkpoint["writer"]) if open_writer and accelerator.is_main_process else None
 
     model, optimizer = accelerator.prepare(model, optimizer)
-    shard_path = get_sharded_dir(checkpoint)
+    shard_path = get_sharded_dir(checkpoint_path)
     accelerator.load_state(shard_path)
+    accelerator.wait_for_everyone()
 
     return epoch, model, optimizer, writer
 
