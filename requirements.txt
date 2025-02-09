@@ -1,4 +1,4 @@
--f https://data.pyg.org/whl/torch-2.3.0+cu118.html
+-f https://data.pyg.org/whl/torch-2.3.0+cu118.html # remember to install ROCm version if using radeon!!!
 ipywidgets==8.1.2
 --extra-index-url https://download.pytorch.org/whl/cu118 ; platform_system == "Windows"
 torch==2.3.0
