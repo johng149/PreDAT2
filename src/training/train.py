@@ -153,7 +153,7 @@ def train_step(
         vertex_lens = vertex_lens.to(device)
         target_span_indices = target_span_indices.to(device)
 
-        assignments, dev_v = (
+        assignments, dec_v = (
             (None, dec_v)
             if not use_glancing
             else glancing_step(
