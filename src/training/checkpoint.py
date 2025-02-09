@@ -104,7 +104,8 @@ def save_checkpoint(
 ):
     # https://github.com/huggingface/accelerate/issues/2000
     # i'll assume you are using fully sharded fsdp
-    if accelerator.state.fsdp_plugin is not None:
+    # accelerator.state.fsdp_plugin is not None:
+    if hasattr(accelerator.state, "fsdp_plugin"):
         save_checkpoint_sharded(model, optimizer, writer, epoch, checkpoint_dir, checkpoint_name, accelerator)
     else:
         save_checkpoint_non_sharded(model, optimizer, writer, epoch, checkpoint_dir, checkpoint_name, accelerator)
