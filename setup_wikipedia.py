@@ -2,8 +2,8 @@ from src.datasets.wikipedia.dataset import process, Dataset
 from transformers import AutoTokenizer
 from pathlib import Path
 
-def setup():
-    dataset_path = "data/wikipedia"
+def setup(location):
+    dataset_path = location
     train_path = Path(dataset_path) / "train"
     if not train_path.exists():
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
