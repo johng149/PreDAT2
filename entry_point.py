@@ -118,7 +118,7 @@ except FileNotFoundError:
         mlp_dim=mlp_dim,
         dropout=dropout,
     )
-    optimizer = Adam(model.parameters(), lr=1e-4)
+    optimizer = Adam(model.parameters(), lr=1e-4 * 4) # for 4 gpus
     writer = SummaryWriter(writer_path) if accelerator.is_main_process else None
     epoch = 0
     model, optimizer = accelerator.prepare(model, optimizer)
