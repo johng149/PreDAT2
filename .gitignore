@@ -5,3 +5,7 @@ data/
 *.pth
 *.pth.*
 *.pt
+old_checkpoints/
+old_runs/
+checkpoints/
+*.safetensors
