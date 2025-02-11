@@ -67,6 +67,7 @@ train_dl = DataLoader(
     batch_size=batch_size,
     shuffle=True,
     collate_fn=train_collate_fn,
+    num_workers=8
 )
 
 test_dl = DataLoader(
@@ -74,6 +75,7 @@ test_dl = DataLoader(
     batch_size=batch_size,
     shuffle=True,
     collate_fn=test_collate_fn,
+    num_workers=8
 )
 
 
