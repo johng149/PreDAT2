@@ -23,7 +23,7 @@ train_ds = WikipediaDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = WikipediaDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 64
+batch_size = 85
 min_ratio: int = 3
 max_ratio: int = 3
 max_num_spans: int = 1
@@ -129,9 +129,9 @@ train_dl, test_dl = accelerator.prepare(
     train_dl, test_dl
 )
 
-target_epochs = 350
-save_every = 50
-test_every = 32
+target_epochs = 2_000_000
+save_every = 5000
+test_every = 500
 grad_clip_norm = None
 
 mask_percent = 0.9
