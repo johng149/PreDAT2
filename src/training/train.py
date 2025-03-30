@@ -14,6 +14,7 @@ from typing import Tuple
 from src.tokenizer.model import Tokenizer
 import os
 from accelerate import Accelerator
+from src.training.metrics import glancing_accuracy
 
 
 
@@ -44,6 +45,24 @@ def test_step(
             transition_probs, emission_probs = model(
                 enc_x=enc, dec_x_vocab=dec_v, dec_x_pos=dec_pos, vertex_lens=vertex_lens
             )
+
+            _, back = findPathBatched(
+                transition_matrix=transition_probs,
+                emission_probs=emission_probs,
+                target_seq=targ,
+                target_span_indices=target_span_indices,
+            )
+            trace, is_padding = backtrace(
+                backtrace=back, target_lens=target_lens, vertex_lens=vertex_lens
+            )
+
+            glat_acc = glancing_accuracy(
+                paths=trace,
+                is_padding=is_padding,
+                emission_probs=emission_probs,
+                target_seq=targ,
+            )
+
             loss = dag_loss(
                 targets=targ,
                 transition_matrix=transition_probs,
@@ -55,6 +74,7 @@ def test_step(
                 raise ValueError("Loss is NaN")
             if writer is not None:
                 writer.add_scalar("Loss/Test", loss.item(), epoch)
+                writer.add_scalar("GlatAcc/Test", glat_acc, epoch)
             model.train()
             return False
     except StopIteration:
@@ -67,6 +87,9 @@ def glancing_step(
     mask_percent: float,
     device: str,
     fill_idx: int,
+    writer: SummaryWriter | None = None,
+    record_glat_acc: str | None = None,
+    record_epoch: int | None = None,
 ) -> Tensor:
     with torch.no_grad():
         model.train()
@@ -92,9 +115,19 @@ def glancing_step(
             target_seq=targ,
             target_span_indices=target_span_indices,
         )
-        trace, _ = backtrace(
+        trace, is_padding = backtrace(
             backtrace=back, target_lens=target_lens, vertex_lens=vertex_lens
         )
+
+        if record_glat_acc is not None and writer is not None and record_epoch is not None:
+            glat_acc = glancing_accuracy(
+                paths=trace,
+                is_padding=is_padding,
+                emission_probs=emission_probs,
+                target_seq=targ,
+            )
+            writer.add_scalar(record_glat_acc, glat_acc, record_epoch)
+
         mask = batchwise_npercent_mask(original=trace, percent=mask_percent)
         assignments = torch.where(mask, -1, trace)
         # assignments = assignments.to(device)
@@ -155,6 +188,9 @@ def train_step(
                 mask_percent=mask_percent,
                 device=device,
                 fill_idx=fill_idx,
+                writer=writer,
+                record_glat_acc="GlatAcc/Training",
+                record_epoch=epoch,
             )
         )
 
