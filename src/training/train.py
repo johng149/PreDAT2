@@ -227,8 +227,9 @@ def train_step(
             raise ValueError("Loss is inf")
         #loss.backward()
         accelerator.backward(loss)
-        if grad_clip_norm is not None and grad_clip_norm > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+        if grad_clip_norm is not None and grad_clip_norm > 0 and accelerator.sync_gradients:
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+            accelerator.clip_grad_norm_(model.parameters(), grad_clip_norm)
         optimizer.step()
         if writer is not None:
             writer.add_scalar("Loss/Training", loss.item(), epoch)

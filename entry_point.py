@@ -18,14 +18,14 @@ tokenizer = Tokenizer(tokenizer)
 
 # Load dataset
 dataset_path = "data/wikipedia"
-max_seq_len = 96
+max_seq_len = 100
 train_ds = WikipediaDataset(f"{dataset_path}/train", max_seq_len)
 test_ds = WikipediaDataset(f"{dataset_path}/test", max_seq_len)
 
 # Load dataloader
-batch_size = 85
-min_ratio: int = 3
-max_ratio: int = 3
+batch_size = 40
+min_ratio: int = 4
+max_ratio: int = 8
 max_num_spans: int = 1
 max_span_fill: float = 0.15
 min_num_spans: int = 1
@@ -120,7 +120,7 @@ except FileNotFoundError:
         mlp_dim=mlp_dim,
         dropout=dropout,
     )
-    optimizer = Adam(model.parameters(), lr=1e-4 * 4) # for 4 gpus
+    optimizer = Adam(model.parameters(), lr=1e-4 * 8) # for 8 gpus
     writer = SummaryWriter(writer_path) if accelerator.is_main_process else None
     epoch = 0
     model, optimizer = accelerator.prepare(model, optimizer)
@@ -134,7 +134,7 @@ train_dl, test_dl = accelerator.prepare(
 target_epochs = 2_000_000
 save_every = 5000
 test_every = 500
-grad_clip_norm = None
+grad_clip_norm = 0.1
 
 mask_percent = 0.9
 use_glancing = True
